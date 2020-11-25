@@ -6,10 +6,11 @@ final class NuklearKitTests: XCTestCase {
         // This is an example of a functional test case.
         // Use XCTAssert and related functions to verify your tests produce the correct
         // results.
-        var ctx = nk_context();
-        let maxRawMemory: UInt = 2048
-        let rawMemory = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(maxRawMemory))
-        nk_init_default(&ctx, nil);
+        nk_metal_init(view: nil, maxVertexBufferSize: 0, maxElementBufferSize: 0)
+        var ctx = MetalNuklear.shared.ctx
+        //let maxRawMemory: UInt = 2048
+        //let rawMemory = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(maxRawMemory))
+        //nk_init_default(&ctx, nil);
 
         var atlas = nk_font_atlas();
         nk_font_atlas_init_default(&atlas);
