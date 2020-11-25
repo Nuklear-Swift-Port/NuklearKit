@@ -1,0 +1,16 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "CNuklear",
+        "repositoryURL": "https://github.com/Nuklear-Swift-Port/CNuklear.git",
+        "state": {
+          "branch": null,
+          "revision": "1b1625e69ff4765b3b02bdfa6ce103c780b4be17",
+          "version": "0.0.2"
+        }
+      }
+    ]
+  },
+  "version": 1
+}
