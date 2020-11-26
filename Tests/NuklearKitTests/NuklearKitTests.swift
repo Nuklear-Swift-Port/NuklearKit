@@ -1,11 +1,97 @@
 import XCTest
+import Cocoa
+import AppKit
+import MetalKit
 @testable import NuklearKit
+
+class SharedDelegateState {
+    var running = true
+    static let shared = SharedDelegateState()
+}
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    let sharedState = SharedDelegateState.shared
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSLog("start app")
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        NSLog("applicationWillTerminate")
+        sharedState.running = false
+    }
+}
+
+class WindowDelegate: NSObject, NSWindowDelegate {
+    let sharedState = SharedDelegateState.shared
+    func windowDidResize(_ notification: Notification) {
+        NSLog("windowDidResize")
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        NSLog("windowWillClose")
+        sharedState.running = false
+    }
+}
 
 final class NuklearKitTests: XCTestCase {
     func testExample() {
+        let app = NSApplication.shared
+        let appDelegate = AppDelegate()
+        app.delegate = appDelegate
+        app.setActivationPolicy(.regular)
+        app.finishLaunching()
+        let baseRectFrame = NSMakeRect(0, 0, 1024, 768)
+        let window = NSWindow(contentRect: baseRectFrame,
+                    styleMask: [.closable, .titled, .resizable, .miniaturizable],
+                    backing: .buffered,
+                    defer: true)
+
+        let windowDelegate = WindowDelegate()
+        window.delegate = windowDelegate
+        window.title = "NuklearKit Test Window"
+        window.acceptsMouseMovedEvents = true
+        window.center()
+        window.orderFrontRegardless()
+
+        // TEST
+        var mtkView = MTKView(frame: baseRectFrame)
+        let device = MTLCreateSystemDefaultDevice()!
+        mtkView.device = device
+        mtkView.colorPixelFormat = .bgra8Unorm
+        guard let view = window.contentView else {
+            fatalError("Cannot get window's content view")
+        }
+        print(view.frame)
+        view.addSubview(mtkView)
+        view.addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "|[mtkView]|", options: [], metrics: nil, views: ["mtkView" : mtkView]))
+        view.addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[mtkView]|", options: [], metrics: nil, views: ["mtkView" : mtkView]))
+        
+        var renderer = NKTestRenderer(view: mtkView, device: device)
+        mtkView.delegate = renderer
+        
+        // v.layer?.backgroundColor = NSColor.systemRed.cgColor
+        // v.wantsLayer = true
+        // window.contentView?.addSubview(v)
+        // if let views = window.contentView?.subviews {
+        //     for v in views {
+        //         print("found frame: \(v.frame) has opac: \(v.alphaValue), needs to draw?: \(v.needsToDraw(f))")
+        //     }
+        // }
+        // print(v.window ?? "no windy")
+
+        while(SharedDelegateState.shared.running) {
+            var ev: NSEvent?
+            ev = app.nextEvent(matching: .any, until: nil, inMode: .default, dequeue: true)
+            if (ev != nil) {
+                app.sendEvent(ev!)
+            }
+        }
+
         // This is an example of a functional test case.
         // Use XCTAssert and related functions to verify your tests produce the correct
         // results.
+        // let delegate = AppDelegate()
+        // delegate.createNewWindow()
         nk_metal_init(view: nil, maxVertexBufferSize: 0, maxElementBufferSize: 0)
         var ctx = MetalNuklear.shared.ctx
         //let maxRawMemory: UInt = 2048
@@ -42,8 +128,8 @@ final class NuklearKitTests: XCTestCase {
             nk_layout_row_end(&ctx);
         }
         nk_end(&ctx);
-        print("Hello, world!")
-        XCTAssertEqual(NuklearKit().text, "Hello, World!")
+        print("Hello, world!")        
+        app.terminate(nil)
     }
 
     static var allTests = [
