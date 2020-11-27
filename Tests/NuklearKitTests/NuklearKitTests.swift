@@ -54,7 +54,7 @@ final class NuklearKitTests: XCTestCase {
         window.orderFrontRegardless()
 
         // TEST
-        var mtkView = MTKView(frame: baseRectFrame)
+        let mtkView = MTKView(frame: baseRectFrame)
         let device = MTLCreateSystemDefaultDevice()!
         mtkView.device = device
         mtkView.colorPixelFormat = .bgra8Unorm
@@ -66,18 +66,37 @@ final class NuklearKitTests: XCTestCase {
         view.addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "|[mtkView]|", options: [], metrics: nil, views: ["mtkView" : mtkView]))
         view.addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[mtkView]|", options: [], metrics: nil, views: ["mtkView" : mtkView]))
         
-        var renderer = NKTestRenderer(view: mtkView, device: device)
+        let renderer = NKTestRenderer(view: mtkView, device: device)
         mtkView.delegate = renderer
         
-        // v.layer?.backgroundColor = NSColor.systemRed.cgColor
-        // v.wantsLayer = true
-        // window.contentView?.addSubview(v)
-        // if let views = window.contentView?.subviews {
-        //     for v in views {
-        //         print("found frame: \(v.frame) has opac: \(v.alphaValue), needs to draw?: \(v.needsToDraw(f))")
-        //     }
-        // }
-        // print(v.window ?? "no windy")
+        nk_metal_init(view: mtkView, maxVertexBufferSize: 0, maxElementBufferSize: 0)
+
+        nk_metal_font_stash_begin()
+        nk_metal_font_stash_end()
+
+        var value: Float = 0.0
+        if nk_begin(&nk_metal.ctx, "Show", nk_rect(50, 50, 220, 220), NK_WINDOW_BORDER.value|NK_WINDOW_MOVABLE.value|NK_WINDOW_CLOSABLE.value) != 0 {
+            /* fixed widget pixel width */
+            nk_layout_row_static(&nk_metal.ctx, 30, 80, 1);
+            // if (nk_button_label(&ctx, "button")) {
+            //     /* event handling */
+            // }
+
+            /* fixed widget window ratio width */
+            nk_layout_row_dynamic(&nk_metal.ctx, 30, 2);
+            nk_option_label(&nk_metal.ctx, "easy", 1)
+            // if (nk_option_label(&ctx, "hard", op == HARD)) op = HARD;
+
+            /* custom widget pixel width */
+            nk_layout_row_begin(&nk_metal.ctx, NK_STATIC, 30, 2);
+            nk_layout_row_push(&nk_metal.ctx, 50);
+            nk_label(&nk_metal.ctx, "Volume:", NK_TEXT_LEFT.value);
+            nk_layout_row_push(&nk_metal.ctx, 110);
+            nk_slider_float(&nk_metal.ctx, 0, &value, 1.0, 0.1);
+            nk_layout_row_end(&nk_metal.ctx);
+        }
+        nk_end(&nk_metal.ctx);
+        print("Hello, world!") 
 
         while(SharedDelegateState.shared.running) {
             var ev: NSEvent?
@@ -85,50 +104,7 @@ final class NuklearKitTests: XCTestCase {
             if (ev != nil) {
                 app.sendEvent(ev!)
             }
-        }
-
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct
-        // results.
-        // let delegate = AppDelegate()
-        // delegate.createNewWindow()
-        nk_metal_init(view: nil, maxVertexBufferSize: 0, maxElementBufferSize: 0)
-        var ctx = MetalNuklear.shared.ctx
-        //let maxRawMemory: UInt = 2048
-        //let rawMemory = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(maxRawMemory))
-        //nk_init_default(&ctx, nil);
-
-        var atlas = nk_font_atlas();
-        nk_font_atlas_init_default(&atlas);
-        nk_font_atlas_begin(&atlas);
-        var w: Int32 = 0
-        var h: Int32 = 0
-        var image = nk_font_atlas_bake(&atlas, &w, &h, NK_FONT_ATLAS_RGBA32);
-        nk_style_set_font(&ctx, &(atlas.default_font).pointee.handle);
-
-        var value: Float = 0.0
-        if nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220), NK_WINDOW_BORDER.value|NK_WINDOW_MOVABLE.value|NK_WINDOW_CLOSABLE.value) != 0 {
-            /* fixed widget pixel width */
-            nk_layout_row_static(&ctx, 30, 80, 1);
-            // if (nk_button_label(&ctx, "button")) {
-            //     /* event handling */
-            // }
-
-            /* fixed widget window ratio width */
-            nk_layout_row_dynamic(&ctx, 30, 2);
-            nk_option_label(&ctx, "easy", 1)
-            // if (nk_option_label(&ctx, "hard", op == HARD)) op = HARD;
-
-            /* custom widget pixel width */
-            nk_layout_row_begin(&ctx, NK_STATIC, 30, 2);
-            nk_layout_row_push(&ctx, 50);
-            nk_label(&ctx, "Volume:", NK_TEXT_LEFT.value);
-            nk_layout_row_push(&ctx, 110);
-            nk_slider_float(&ctx, 0, &value, 1.0, 0.1);
-            nk_layout_row_end(&ctx);
-        }
-        nk_end(&ctx);
-        print("Hello, world!")        
+        }       
         app.terminate(nil)
     }
 
