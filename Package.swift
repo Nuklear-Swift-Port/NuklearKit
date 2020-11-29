@@ -26,7 +26,11 @@ let package = Package(
             dependencies: [],
             resources: [
                 .process("Resources")
-            ]),
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-L/usr/local/lib"])
+            ]
+        ),
         .testTarget(
             name: "NuklearKitTests",
             dependencies: ["NuklearKit"]),

@@ -5,61 +5,67 @@ let nk_metal = NKMetal.shared
 let nk_dvc = NKMetalDevice.shared
 
 class NKMetalDevice {
-    static let shared = NKMetalDevice()
-    var null = nk_draw_null_texture()
-    var fontTexIndex = 0
-    var maxElementBufferSize = 0
-    var maxVertexBufferSize = 0
-    var vertexFunction: MTLFunction? = nil
-    var fragmentFunction: MTLFunction? = nil
+  static let shared = NKMetalDevice()
+  static let maxTextures = 256
+  var null = nk_draw_null_texture()
+  var fontTexIndex = 0
+  var maxElementBufferSize = 0
+  var maxVertexBufferSize = 0
+  var vertexFunction: MTLFunction? = nil
+  var fragmentFunction: MTLFunction? = nil
+  var pipelineDescriptor = MTLRenderPipelineDescriptor()
+  var cmds = nk_buffer()
+  var vertexDescriptor = MTLVertexDescriptor()
+  var vertexBuffer: MTLBuffer? = nil
+  var elementBuffer: MTLBuffer? = nil
+  var tex_ids = [Int](repeating: 0, count: maxTextures)
+  var tex_handles = [Int](repeating: 0, count: maxTextures)
 }
 
 class NKMetal {
-    static let shared = NKMetal()
-    static let textMax = 256
-    static let maxTextures = 256
-    static let doubleClickLo = 0.02
-    static let doubleClickHi = 0.20
-    var view: MTKView? = nil
-    var ctx = nk_context()
-    var nkdvc = nk_dvc
-    var atlas = nk_font_atlas()
-    var fbScale = nk_vec2()
-    var scroll = nk_vec2()
-    var doubleClickPosition = nk_vec2()
-    var width = 0
-    var height = 0
-    var deviceWidth = 0
-    var deviceHeight = 0
-    var isDoubleClickDown = 0
-    var lastButtonClick = 0.0
-    var text = [UInt](repeating: 0, count: textMax)
+  static let shared = NKMetal()
+  static let textMax = 256
+  static let doubleClickLo = 0.02
+  static let doubleClickHi = 0.20
+  var view: MTKView? = nil
+  var ctx = nk_context()
+  var nkdvc = nk_dvc
+  var atlas = nk_font_atlas()
+  var fbScale = nk_vec2()
+  var scroll = nk_vec2()
+  var doubleClickPosition = nk_vec2()
+  var width = 0
+  var height = 0
+  var deviceWidth = 0
+  var deviceHeight = 0
+  var isDoubleClickDown = 0
+  var lastButtonClick = 0.0
+  var text = [UInt](repeating: 0, count: textMax)
 }
 
 @discardableResult
 func nk_metal_init(view: MTKView?, maxVertexBufferSize: Int, maxElementBufferSize: Int) -> UnsafeMutablePointer<nk_context> {
-    print("nk_*_init, copy paste not created")
-    nk_init_default(&nk_metal.ctx, nil)
-    nk_metal.view = view
-    nk_dvc.maxVertexBufferSize = maxVertexBufferSize
-    nk_dvc.maxElementBufferSize = maxElementBufferSize
-    nk_metal.isDoubleClickDown = nk_false;
-    nk_metal.doubleClickPosition = nk_vec2(0, 0)
-    nk_metal.lastButtonClick = 0
-    nk_metal_device_init()
-    return withUnsafeMutablePointer(to: &nk_metal.ctx, { $0 })
+  print("nk_*_init, copy paste not created")
+  nk_init_default(&nk_metal.ctx, nil)
+  nk_metal.view = view
+  nk_dvc.maxVertexBufferSize = maxVertexBufferSize
+  nk_dvc.maxElementBufferSize = maxElementBufferSize
+  nk_metal.isDoubleClickDown = nk_false;
+  nk_metal.doubleClickPosition = nk_vec2(0, 0)
+  nk_metal.lastButtonClick = 0
+  nk_metal_device_init()
+  return withUnsafeMutablePointer(to: &nk_metal.ctx, { $0 })
 }
 
 func nk_metal_device_init(){
-    print("nk_glfw3_device_create NOT YET IMPLEMENTED")
-    guard let device = nk_metal.view!.device else {
-        fatalError("Passed view has no device!")
-    }
-    do {
-        let shaderSource = """
+  print("nk_glfw3_device_create NOT YET IMPLEMENTED")
+  guard let device = nk_metal.view!.device else {
+    fatalError("Passed view has no device!")
+  }
+  do {
+    let shaderSource = """
             #include <metal_stdlib>
             using namespace metal;
-            //#import "./NuklearShaderBridge.h"
             #import <simd/simd.h>
 
             typedef struct {
@@ -95,38 +101,64 @@ func nk_metal_device_init(){
                 return vertexInput.fragColor * float4(sampledColor, 1.0);
             }
         """
-        let library = try device.makeLibrary(source: shaderSource, options: nil)
-        nk_dvc.vertexFunction = library.makeFunction(name: "nk_vertex_main")
-        nk_dvc.fragmentFunction = library.makeFunction(name: "nk_fragment_main")
-    } catch {
-        fatalError("encountered in nk_metal_device_init(): \n\(error)")
+    let library = try device.makeLibrary(source: shaderSource, options: nil)
+    nk_dvc.vertexFunction = library.makeFunction(name: "nk_vertex_main")
+    nk_dvc.fragmentFunction = library.makeFunction(name: "nk_fragment_main")
+  } catch {
+    fatalError("encountered in nk_metal_device_init(): \n\(error)")
+  }
+  nk_buffer_init_default(&nk_dvc.cmds)
+  nk_dvc.pipelineDescriptor.colorAttachments[0].pixelFormat = .rgba8Unorm
+  nk_dvc.pipelineDescriptor.fragmentFunction = nk_dvc.fragmentFunction
+  nk_dvc.pipelineDescriptor.vertexFunction = nk_dvc.vertexFunction
+  // VertexIn Color
+  nk_dvc.vertexDescriptor.attributes[0].format = .float4 // THIS IS ACTUALLY A CHAR 4 NOT FLOAT 4
+  nk_dvc.vertexDescriptor.attributes[0].offset = 0
+  nk_dvc.vertexDescriptor.attributes[0].bufferIndex = 0
+  // VertexIn Position
+  nk_dvc.vertexDescriptor.attributes[1].format = .float2
+  nk_dvc.vertexDescriptor.attributes[1].offset = 4
+  nk_dvc.vertexDescriptor.attributes[1].bufferIndex = 0
+  // VertexIn UV
+  nk_dvc.vertexDescriptor.attributes[2].format = .float2
+  nk_dvc.vertexDescriptor.attributes[2].offset = 12
+  nk_dvc.vertexDescriptor.attributes[2].bufferIndex = 0
+  // Describe Entire Buffer
+  nk_dvc.vertexDescriptor.layouts[0].stride = 20
+  if let view = nk_metal.view {
+    guard let device = view.device else {
+      fatalError("Could not get device from view")
     }
+    let shareEnabled = MTLResourceOptions.storageModeShared
+    nk_dvc.vertexBuffer = device.makeBuffer(length: nk_dvc.maxVertexBufferSize, options: shareEnabled)
+    nk_dvc.elementBuffer = device.makeBuffer(length: nk_dvc.maxElementBufferSize, options: shareEnabled)
+  }
+  print("Need to set text ids and handles here, working on upload texture")
 }
 
 func nk_metal_font_stash_begin() -> Void {
-    nk_font_atlas_init_default(&nk_metal.atlas);
-    nk_font_atlas_begin(&nk_metal.atlas);
+  nk_font_atlas_init_default(&nk_metal.atlas);
+  nk_font_atlas_begin(&nk_metal.atlas);
 }
 
 func nk_metal_device_upload_atlas(_ image: UnsafeRawPointer, width: Int32, height: Int32) -> Void {
-    nk_dvc.fontTexIndex = nk_metal_create_texture(image, width: width, height: height)
+  nk_dvc.fontTexIndex = nk_metal_create_texture(image, width: width, height: height)
 }
 
 func nk_metal_create_texture(_ image: UnsafeRawPointer, width: Int32, height: Int32) -> Int {
-    print("nk_metal_create_texture Not implemented")
-    return 0
+  print("nk_metal_create_texture Not implemented")
+  return 0
 }
 
 func nk_metal_font_stash_end() -> Void {
-    var w: Int32 = 0
-    var h: Int32 = 0
-    guard let image = nk_font_atlas_bake(&nk_metal.atlas, &w, &h, NK_FONT_ATLAS_RGBA32) else {
-        fatalError("Nuklear font baking failed!")
-    }
-    nk_metal_device_upload_atlas(image, width: w, height: h)
-    nk_font_atlas_end(&nk_metal.atlas, nk_handle_id(Int32(nk_metal.nkdvc.fontTexIndex)), &nk_metal.nkdvc.null);
-    if nk_metal.atlas.default_font != nil {
-        print("Gonna set font style")
-        nk_style_set_font(&nk_metal.ctx, &(nk_metal.atlas.default_font).pointee.handle)
-    }
+  var w: Int32 = 0
+  var h: Int32 = 0
+  guard let image = nk_font_atlas_bake(&nk_metal.atlas, &w, &h, NK_FONT_ATLAS_RGBA32) else {
+    fatalError("Nuklear font baking failed!")
+  }
+  nk_metal_device_upload_atlas(image, width: w, height: h)
+  nk_font_atlas_end(&nk_metal.atlas, nk_handle_id(Int32(nk_metal.nkdvc.fontTexIndex)), &nk_metal.nkdvc.null);
+  if nk_metal.atlas.default_font != nil {
+    nk_style_set_font(&nk_metal.ctx, &(nk_metal.atlas.default_font).pointee.handle)
+  }
 }
