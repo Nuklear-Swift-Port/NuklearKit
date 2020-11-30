@@ -69,13 +69,13 @@ func nk_metal_device_init(){
             #import <simd/simd.h>
 
             typedef struct {
-            matrix_float4x4 projectionMatrix;
+                matrix_float4x4 projectionMatrix;
             } Uniforms;
 
             struct NKVertexIn {
-                float4 color [[attribute(0)]];
-                float2 position [[attribute(1)]];
-                float2 uv [[attribute(2)]];
+                float2 position [[attribute(0)]];
+                float2 uv [[attribute(1)]];
+                uchar4 color [[attribute(2)]];
             };
 
             struct NKVertexOut {
@@ -88,7 +88,7 @@ func nk_metal_device_init(){
                                         constant Uniforms &uniforms [[buffer(1)]]) {
                 NKVertexOut out {
                     .position = uniforms.projectionMatrix * float4(nkVertexIn.position, 0, 1),
-                    .fragColor = nkVertexIn.color,
+                    .fragColor = float4(nkVertexIn.color) / 255.0,
                     .fragUV = nkVertexIn.uv
                 };
                 return out;
@@ -111,20 +111,24 @@ func nk_metal_device_init(){
   nk_dvc.pipelineDescriptor.colorAttachments[0].pixelFormat = .rgba8Unorm
   nk_dvc.pipelineDescriptor.fragmentFunction = nk_dvc.fragmentFunction
   nk_dvc.pipelineDescriptor.vertexFunction = nk_dvc.vertexFunction
-  // VertexIn Color
-  nk_dvc.vertexDescriptor.attributes[0].format = .float4 // THIS IS ACTUALLY A CHAR 4 NOT FLOAT 4
-  nk_dvc.vertexDescriptor.attributes[0].offset = 0
-  nk_dvc.vertexDescriptor.attributes[0].bufferIndex = 0
   // VertexIn Position
-  nk_dvc.vertexDescriptor.attributes[1].format = .float2
-  nk_dvc.vertexDescriptor.attributes[1].offset = 4
-  nk_dvc.vertexDescriptor.attributes[1].bufferIndex = 0
+  var offset = 0
+  nk_dvc.vertexDescriptor.attributes[0].format = .float2
+  nk_dvc.vertexDescriptor.attributes[0].offset = offset
+  nk_dvc.vertexDescriptor.attributes[0].bufferIndex = 0
+  offset += MemoryLayout<SIMD2<Float>>.stride
   // VertexIn UV
-  nk_dvc.vertexDescriptor.attributes[2].format = .float2
-  nk_dvc.vertexDescriptor.attributes[2].offset = 12
+  nk_dvc.vertexDescriptor.attributes[1].format = .float2
+  nk_dvc.vertexDescriptor.attributes[1].offset = offset
+  nk_dvc.vertexDescriptor.attributes[1].bufferIndex = 0
+  offset += MemoryLayout<SIMD2<Float>>.stride
+  // VertexIn Color
+  nk_dvc.vertexDescriptor.attributes[2].format = .uchar4
+  nk_dvc.vertexDescriptor.attributes[2].offset = offset
   nk_dvc.vertexDescriptor.attributes[2].bufferIndex = 0
-  // Describe Entire Buffer
-  nk_dvc.vertexDescriptor.layouts[0].stride = 20
+  offset += MemoryLayout<SIMD4<UTF8Char>>.stride
+  // Describe Entire Buffer Layout 2xFloat|2xFloat|4xChar = 20 Byte
+  nk_dvc.vertexDescriptor.layouts[0].stride = offset
   if let view = nk_metal.view {
     guard let device = view.device else {
       fatalError("Could not get device from view")
@@ -141,22 +145,50 @@ func nk_metal_font_stash_begin() -> Void {
   nk_font_atlas_begin(&nk_metal.atlas);
 }
 
-func nk_metal_device_upload_atlas(_ image: UnsafeRawPointer, width: Int32, height: Int32) -> Void {
-  nk_dvc.fontTexIndex = nk_metal_create_texture(image, width: width, height: height)
+func nk_metal_device_upload_atlas(_ image: inout UnsafeMutableRawPointer, width: Int32, height: Int32) -> Void {
+  //nk_dvc.fontTexIndex = nk_metal_create_texture(&image, width: width, height: height)
+  print("nk_metal_create_texture Not implemented")
+  let size = MemoryLayout<Int32>.size
+  let data = Data(bytesNoCopy: image, count: Int(width * height) * size, deallocator: .none)
+  //let data = NSData(bytesNoCopy: image, length: Int(width * height) * size)
+  let img = NSImage(data: data)
+  /// TODO: This needs to be changed. The Texture is not being loaded from in memory
+  guard let view = nk_metal.view, let device = view.device else {
+    fatalError("Could not get view from nk metal!")
+  }
+  let loader = MTKTextureLoader(device: device)
+  do {
+    let texture = try loader.newTexture(data: data, options: nil)
+  } catch {
+    fatalError("Loading texture from create_texture: \(error)")
+  }
+  nk_dvc.fontTexIndex = 0
 }
 
-func nk_metal_create_texture(_ image: UnsafeRawPointer, width: Int32, height: Int32) -> Int {
+func nk_metal_create_texture(_ image: inout UnsafeMutableRawPointer, width: Int32, height: Int32) -> Int {
   print("nk_metal_create_texture Not implemented")
+  let size = MemoryLayout<Int32>.size
+  let data = NSData(bytesNoCopy: image, length: Int(width * height) * size)
+  let img = NSImage(data: data as Data)
+  guard let view = nk_metal.view, let device = view.device else {
+    fatalError("Could not get view from nk metal!")
+  }
+  let loader = MTKTextureLoader(device: device)
+  do {
+    let texture = try loader.newTexture(data: data as Data, options: nil)
+  } catch {
+    fatalError("Loading texture from create_texture: \(error)")
+  }
   return 0
 }
 
 func nk_metal_font_stash_end() -> Void {
   var w: Int32 = 0
   var h: Int32 = 0
-  guard let image = nk_font_atlas_bake(&nk_metal.atlas, &w, &h, NK_FONT_ATLAS_RGBA32) else {
+  guard var _ = nk_font_atlas_bake(&nk_metal.atlas, &w, &h, NK_FONT_ATLAS_RGBA32) else {
     fatalError("Nuklear font baking failed!")
   }
-  nk_metal_device_upload_atlas(image, width: w, height: h)
+  nk_metal_device_upload_atlas(&nk_metal.atlas.pixel, width: w, height: h)
   nk_font_atlas_end(&nk_metal.atlas, nk_handle_id(Int32(nk_metal.nkdvc.fontTexIndex)), &nk_metal.nkdvc.null);
   if nk_metal.atlas.default_font != nil {
     nk_style_set_font(&nk_metal.ctx, &(nk_metal.atlas.default_font).pointee.handle)
